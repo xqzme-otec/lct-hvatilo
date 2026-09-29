@@ -14,7 +14,7 @@ services:
 #      vault-agent:
 #        condition: service_started
     networks:
-      - agent-net
+      - lct-net
 
   inference-service:
     build: ./inference
@@ -40,7 +40,7 @@ services:
 #    extra_hosts:
 #      - "host.docker.internal:host-gateway"
 #    networks:
-#      - agent-net
+#      - lct-net
 
 networks:
   lct-net:
