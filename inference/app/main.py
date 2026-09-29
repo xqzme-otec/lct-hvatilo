@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
-from inference.vertebrae_with_rib import infer_vertebrae_with_rib
+from vertebrae_with_rib import infer_vertebrae_with_rib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -18,8 +18,8 @@ services:
 
   inference:
     build:
-      context: ./inference
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: inference/Dockerfile
 #    deploy:
 #      resources:
 #        reservations:

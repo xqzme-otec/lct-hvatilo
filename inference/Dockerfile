@@ -22,7 +22,9 @@ RUN mkdir -p /app/models && \
 RUN mkdir -p /app/models && \
     curl -L -o /app/models/art_paste_strong.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/art_paste_strong.pt
 
-COPY . .
+COPY inference/ /app/inference/
+COPY inference/requirements.txt /app/
+
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8001
 
