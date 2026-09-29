@@ -1,11 +1,14 @@
 import logging
 import tempfile
 import zipfile
+import numpy as np
+from PIL import Image
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from inference.vertebrae_with_rib import infer_vertebrae_with_rib
+from scripts.region import SPINE, detect_region
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,12 +28,15 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
     """Синхронный запуск инференса по всем файлам."""
     results = []
     for p in file_paths:
-        try:
-            pred = infer_vertebrae_with_rib(p)
-            results.append({"file": str(p), "ok": True, "result": pred})
-        except Exception as e:
-            logger.exception("Inference failed for %s", p)
-            results.append({"file": str(p), "ok": False, "error": str(e)})
+        if detect_region(np.array(Image.open(p))) == SPINE:
+            try:
+                pred = infer_vertebrae_with_rib(p)
+                results.append({"file": str(p), "ok": True, "result": pred})
+            except Exception as e:
+                logger.exception("Inference failed for %s", p)
+                results.append({"file": str(p), "ok": False, "error": str(e)})
+        else:
+            results.append({"file": str(p), "ok": False, "error": "Unsupported body region"})
     return results
 
 @app.post("/infer")
