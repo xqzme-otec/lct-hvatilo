@@ -85,7 +85,7 @@ def spine_from_result(res, conf: float, kpt_conf: float, dedup: bool = True) -> 
 
 
 def infer_vertebrae(image):
-    model = YOLO("/app/models/spine_pose.pt")
+    model = YOLO("/app/models/art_paste_strong.pt")
     res = model.predict(np.stack([image.pixels] * 3, -1), imgsz=640, conf=0.05, verbose=False)[0]
 
     sp = spine_from_result(res, conf=0.3, kpt_conf=0.5)
