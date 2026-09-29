@@ -122,3 +122,5 @@ def infer_vertebrae(image_path):
             "top": v["top"][:2],
             "bottom": v["bottom"][:2]
         })
+
+    return response_data
