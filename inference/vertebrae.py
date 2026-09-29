@@ -4,8 +4,8 @@ from logging import Logger
 
 import numpy as np
 from ultralytics import YOLO
-from dxaqc.dicom_io import load_dicom
-from dxaqc.ferguson import ferguson
+
+from scripts.ferguson import ferguson
 
 logger = Logger(__name__)
 logger.setLevel(logging.DEBUG)
