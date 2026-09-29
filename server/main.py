@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="server/templates")
 
 ALLOWED_EXTENSIONS = [".zip"]
 MAX_SIZE = 50 * 1024 * 1024
