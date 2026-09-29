@@ -30,7 +30,8 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
     """Синхронный запуск инференса по всем файлам."""
     results = []
     for p in file_paths:
-        if detect_region(np.array(Image.open(p))) == SPINE:
+        anatomical_region = detect_region(np.array(Image.open(p)))
+        if anatomical_region == SPINE:
             vertebrae_w_r = None
             vertebrae = None
             artifact = None
@@ -51,6 +52,7 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
             results.append({
                 "file": str(p),
                 "ok": True,
+                "region": anatomical_region,
                 "vertebrae_w_rib": vertebrae_w_r,
                 "vertebrae": vertebrae,
                 "artifact": artifact,
