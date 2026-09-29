@@ -43,7 +43,7 @@ services:
 #      - agent-net
 
 networks:
-  agent-net:
+  lct-net:
     driver: bridge
     ipam:
       config:
