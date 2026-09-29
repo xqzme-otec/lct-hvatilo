@@ -1,6 +1,5 @@
 import logging
 from logging import Logger
-from pathlib import Path
 from ultralytics import YOLO
 
 logger = Logger(__name__)

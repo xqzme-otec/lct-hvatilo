@@ -1,9 +1,14 @@
+import logging
 import math
+from logging import Logger
 
 import numpy as np
 from ultralytics import YOLO
 from dxaqc.dicom_io import load_dicom
 from dxaqc.ferguson import ferguson
+
+logger = Logger(__name__)
+logger.setLevel(logging.DEBUG)
 
 LEVELS_BOTTOM_UP = ["L5", "L4", "L3", "L2", "L1", "Th12", "Th11", "Th10"]
 AXIS_LIMIT_DEG = 5.0
@@ -84,8 +89,27 @@ def infer_vertebrae(image):
     res = model.predict(np.stack([image.pixels] * 3, -1), imgsz=640, conf=0.05, verbose=False)[0]
 
     sp = spine_from_result(res, conf=0.3, kpt_conf=0.5)
-    print("позвонков:", sp["n_vertebrae"], "угол оси:", round(sp["axis_deg"], 2), "°")
-    for v in sp["vertebrae"]:
-        print(v["level"], v["box"], "верх", v["top"][:2], "низ", v["bottom"][:2])
+    ferguson_result = ferguson(sp["vertebrae"])
 
-    print(ferguson(sp["vertebrae"]))
+    logger.debug("Количество позвонков:", sp["n_vertebrae"], "Угол оси:", round(sp["axis_deg"], 2), "°")
+    for v in sp["vertebrae"]:
+        logger.debug(v["level"], v["box"], "Топ:", v["top"][:2], "Бот:", v["bottom"][:2])
+    logger.debug(ferguson_result)
+
+    # Формируем структуру данных для JSON
+    response_data = {
+        "n_vertebrae": sp["n_vertebrae"],
+        "axis_deg": round(sp["axis_deg"], 2),
+        "ferguson": ferguson_result,
+        "vertebrae": []
+    }
+
+    for v in sp["vertebrae"]:
+        # v["box"], v["top"], v["bottom"] могут быть массивами,
+        # NpEncoder автоматически преобразует их в списки (lists)
+        response_data["vertebrae"].append({
+            "level": v["level"],
+            "box": v["box"],
+            "top": v["top"][:2],
+            "bottom": v["bottom"][:2]
+        })

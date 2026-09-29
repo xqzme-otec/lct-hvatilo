@@ -22,7 +22,8 @@ RUN mkdir -p /app/models && \
 RUN mkdir -p /app/models && \
     curl -L -o /app/models/art_paste_strong.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/art_paste_strong.pt
 
-COPY . inference/
+COPY . .
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8001
 
-CMD ["uvicorn", "inference.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
