@@ -24,6 +24,8 @@ RUN curl -L -o /app/models/art_paste_strong.pt https://github.com/xqzme-otec/lct
 
 RUN curl -L -o /app/models/spine_pose.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/spine_pose.pt
 
+RUN curl -L -o /app/models/crest_pose.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/crest_pose.pt
+
 COPY inference/ /app/inference/
 COPY scripts/ /app/scripts/
 

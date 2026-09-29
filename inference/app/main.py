@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from inference.artifact import inference_artifact
+from inference.crest import infer_crest_pose
 from inference.vertebrae import infer_vertebrae
 from inference.vertebrae_with_rib import infer_vertebrae_with_rib
 from scripts.region import SPINE, detect_region
@@ -32,7 +33,7 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
     results = []
     for p in file_paths:
         file_started = time.perf_counter()
-        
+
         region_started = time.perf_counter()
         anatomical_region = detect_region(np.array(Image.open(p)))
         region_detect_ms = (time.perf_counter() - region_started) * 1000
@@ -47,6 +48,7 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
                 ("vertebrae_w_rib", infer_vertebrae_with_rib),
                 ("vertebrae", infer_vertebrae),
                 ("artifact", inference_artifact),
+                ("crest_pose", infer_crest_pose),
             )
 
             for model_name, model_func in models:
@@ -68,6 +70,7 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
                 "vertebrae_w_rib": model_results.get("vertebrae_w_rib"),
                 "vertebrae": model_results.get("vertebrae"),
                 "artifact": model_results.get("artifact"),
+                "crest_pose": model_results.get("crest_pose"),
                 "timings": timings,
             })
         else:
