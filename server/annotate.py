@@ -47,7 +47,27 @@ def _draw_point(img, pt, color, radius=4, label=None):
     if label:
         _put_label(img, str(label), (x + 5, y - 5), color)
 
+def _draw_detections(img, vwr, color, box_alpha=0.18, box_thickness=2,
+                     kp_radius=4, kp_label_prefix=""):
+    """
+    Рисует detections из блока вида:
+        {"verdict": "...", "detections": [{"box_index": 0,
+                                            "box": [x1,y1,x2,y2],
+                                            "keypoints": [[x,y], ...]}, ...]}
+    """
+    if not vwr:
+        return
+    for det in vwr.get("detections", []):
+        box = det.get("box")
+        if box:
+            _draw_filled_box(img, box, color, alpha=box_alpha, thickness=box_thickness)
 
+        for i, kp in enumerate(det.get("keypoints", [])):
+            _draw_point(
+                img, kp, color,
+                radius=kp_radius,
+                label=f"{kp_label_prefix}{i}" if kp_label_prefix else str(i),
+            )
 # ----------------------- основная функция -----------------------
 
 def annotate_image(image, result):
@@ -88,6 +108,15 @@ def annotate_image(image, result):
                 _draw_filled_box(img, box, (0, 165, 255), alpha=0.18, thickness=2)
             for i, kp in enumerate(det.get("keypoints", [])):
                 _draw_point(img, kp, (0, 165, 255), radius=4, label=str(i))
+
+    _draw_detections(
+        img,
+        result.get("crest_pose"),
+        color=(255, 0, 255),
+        box_alpha=0.18,
+        kp_radius=4,
+        kp_label_prefix="crest_",
+    )
 
     # --- vertebrae ---
     vertebrae = result.get("vertebrae")
