@@ -19,8 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p /app/models && \
     curl -L -o /app/models/vertebrae_with_rib.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/vertebrae_with_ribs.pt
-RUN mkdir -p /app/models && \
-    curl -L -o /app/models/art_paste_strong.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/art_paste_strong.pt
+
+RUN curl -L -o /app/models/art_paste_strong.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/art_paste_strong.pt
+
+RUN curl -L -o /app/models/spine_pose.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/spine_pose.pt
 
 COPY inference/ /app/inference/
 COPY scripts/ /app/scripts/

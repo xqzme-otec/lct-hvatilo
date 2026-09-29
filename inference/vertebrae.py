@@ -94,7 +94,7 @@ def infer_vertebrae(image_path):
     model_input = np.stack([image] * 3, axis=-1)
 
 
-    model = YOLO("/app/models/art_paste_strong.pt")
+    model = YOLO("/app/models/spine_pose.pt")
     res = model.predict(model_input, imgsz=640, conf=0.05, verbose=False)[0]
 
     sp = spine_from_result(res, conf=0.3, kpt_conf=0.5)
