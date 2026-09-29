@@ -11,6 +11,7 @@ FIELDNAMES = [
     "image_uid",
     "anatomical_region",
     "quality_class",
+    "quality_prob"
     "violation_type",
     "processing_status",
     "time_of_processing",
