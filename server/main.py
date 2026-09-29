@@ -217,7 +217,7 @@ def _convert_and_zip(dicom_files: list[Path], base_dir: Path, output_zip: Path) 
 
 
 @app.post("/upload")
-async def upload_archive(file: UploadFile = File(...)):
+async def upload_archive(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
@@ -294,7 +294,7 @@ async def upload_archive(file: UploadFile = File(...)):
             )
 
             _ANNOTATED[token] = (annotated_zip_path, time.time())
-            annotated_url = f"/annotated/{token}"
+            annotated_url = request.url_for("download_annotated", token=token)
         except Exception:
             logger.exception("Annotating results failed")
             # не валим весь запрос из-за разметки — просто не отдаём ссылку
