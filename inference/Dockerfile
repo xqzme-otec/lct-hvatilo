@@ -25,6 +25,7 @@ RUN mkdir -p /app/models && \
 COPY inference/ /app/inference/
 COPY inference/requirements.txt /app/
 
+ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8001
 
