@@ -201,5 +201,5 @@ async def upload_archive(file: UploadFile = File(...)):
             "filename": file.filename,
             "dicom_count": len(dicom_files),
             "results": inference_results.get("results", []),
-            "csv": enrich_json_with_csv(inference_results.get("results", [])),
+            "csv": enrich_json_with_csv(inference_results),
         }
