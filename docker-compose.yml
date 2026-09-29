@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: inference/Dockerfile
+    networks:
+      - lct-net
 #    deploy:
 #      resources:
 #        reservations:
