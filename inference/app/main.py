@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
+from inference.artifact import inference_artifact
 from inference.vertebrae import infer_vertebrae
 from inference.vertebrae_with_rib import infer_vertebrae_with_rib
 from scripts.region import SPINE, detect_region
@@ -40,12 +41,17 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
                 vertebrae = infer_vertebrae(p)
             except Exception as e:
                 logger.exception("Inference failed for %s", p)
+            try:
+                artifact = inference_artifact(p)
+            except Exception as e:
+                logger.exception("Inference failed for %s", p)
 
             results.append({
                 "file": str(p),
                 "ok": True,
                 "vertebrae_w_rib": vertebrae_w_r,
                 "vertebrae": vertebrae,
+                "artifact": artifact,
             })
         else:
             results.append({"file": str(p), "ok": False, "error": "Unsupported body region"})
