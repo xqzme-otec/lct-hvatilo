@@ -8,9 +8,8 @@ from server.dicom_io import load_dicom
 img = load_dicom("dicom_examples/CR000000_ПОП.dcm")      # переводит снимок в uint8 так же, как при обучении
 
 
-def inference_final(image_path: Path):
-    model_path = Path(__file__).resolve().parent.parent / "models" / "final.pt"
-    model = YOLO(model_path)
+def inference_artifact(image):
+    model = YOLO("/app/models/art_paste_strong.pt")  # Загружаем модель при старте
 
     r = model.predict(np.stack([img.pixels] * 3, -1), imgsz=640, conf=0.4, verbose=False)[0]
 
