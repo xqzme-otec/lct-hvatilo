@@ -17,7 +17,9 @@ services:
       - lct-net
 
   inference-service:
-    build: ./inference
+    build:
+      context: ./inference
+      dockerfile: Dockerfile
 #    deploy:
 #      resources:
 #        reservations:
