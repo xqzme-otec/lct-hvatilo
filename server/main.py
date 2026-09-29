@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.concurrency import run_in_threadpool
 
 from hot_env import reload_if_changed, load_env
-from dicom_io import find_dicom_files
+from dicom_io import find_dicom_files, _dicom_to_png
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -112,6 +112,27 @@ def _create_dicom_zip(dicom_files: list[Path], base_dir: Path, output_zip: Path)
             zf.write(file_path, arcname)
 
 
+def _convert_and_zip(dicom_files: list[Path], base_dir: Path, output_zip: Path) -> None:
+    """Конвертирует каждый DICOM в PNG и складывает PNG-и в ZIP."""
+    with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in dicom_files:
+            arcname = file_path.relative_to(base_dir).with_suffix(".png")
+
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_png = Path(tmp.name)
+
+            try:
+                _dicom_to_png(file_path, tmp_png)
+                zf.write(tmp_png, arcname)
+            except Exception:
+                logger.exception("Failed to convert DICOM: %s", file_path)
+                raise
+            finally:
+                with contextlib.suppress(OSError):
+                    tmp_png.unlink()
+
+
+
 @app.post("/upload")
 async def upload_archive(file: UploadFile = File(...)):
     if not file.filename:
@@ -149,24 +170,31 @@ async def upload_archive(file: UploadFile = File(...)):
         if len(dicom_files) > MAX_FILES:
             raise HTTPException(413, f"Too many DICOM files: {len(dicom_files)}")
 
-        dicom_zip_path = tmp_path / "dicom_files.zip"
-        await run_in_threadpool(_create_dicom_zip, dicom_files, extract_dir, dicom_zip_path)
+        dicom_zip_path = tmp_path / "images.zip"
+        try:
+            await run_in_threadpool(
+                _convert_and_zip, dicom_files, extract_dir, dicom_zip_path
+            )
+        except Exception:
+            logger.exception("DICOM → PNG conversion failed")
+            raise HTTPException(500, "Failed to convert DICOM files to images")
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:  # Таймаут увеличен для инференса
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 with open(dicom_zip_path, "rb") as f:
-                    files = {"file": ("dicom_files.zip", f, "application/zip")}
+                    files = {"file": ("images.zip", f, "application/zip")}
                     response = await client.post(INFERENCE_URL, files=files)
 
                 response.raise_for_status()
                 inference_results = response.json()
-
         except httpx.RequestError as exc:
-            logger.error(f"Ошибка соединения с сервисом инференса: {exc}")
+            logger.error("Ошибка соединения с сервисом инференса: %s", exc)
             raise HTTPException(503, "Сервис инференса недоступен")
         except httpx.HTTPStatusError as exc:
-            logger.error(f"Сервис инференса вернул ошибку: {exc.response.text}")
-            raise HTTPException(exc.response.status_code, f"Ошибка инференса: {exc.response.text}")
+            logger.error("Ошибка сервиса инференса: %s", exc.response.text)
+            raise HTTPException(
+                exc.response.status_code, f"Ошибка инференса: {exc.response.text}"
+            )
 
         return {
             "filename": file.filename,

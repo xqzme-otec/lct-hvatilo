@@ -14,6 +14,7 @@ from typing import Iterator, Optional
 
 import numpy as np
 import pydicom
+from PIL import Image
 
 # GE Lunar Prodigy exports in this dataset have no PixelSpacing; ExposedArea (mm)
 # divided by the matrix size gives ~0.6 mm/px on most files. Some files carry
@@ -145,3 +146,54 @@ def find_dicom_files(root: str | Path) -> list[Path]:
 def iter_dicoms(root: str | Path) -> Iterator[DxaImage]:
     for p in find_dicom_files(root):
         yield load_dicom(p)
+
+
+def _dicom_to_png(dicom_path: Path, output_path: Path) -> None:
+    """Конвертирует один DICOM-файл в PNG с применением rescale и windowing."""
+    ds = pydicom.dcmread(str(dicom_path), force=True)
+
+    try:
+        arr = ds.pixel_array.astype(np.float32)
+    except Exception as exc:
+        raise RuntimeError(f"Cannot read pixel data from {dicom_path.name}: {exc}") from exc
+
+    # Rescale (HU для CT и т.п.)
+    slope = float(getattr(ds, "RescaleSlope", 1) or 1)
+    intercept = float(getattr(ds, "RescaleIntercept", 0) or 0)
+    arr = arr * slope + intercept
+
+    # Windowing
+    def _first(v):
+        # DICOM может вернуть MultiValue / список
+        if isinstance(v, (list, tuple)):
+            return float(v[0])
+        try:
+            return float(v[0]) if not isinstance(v, (int, float)) else float(v)
+        except Exception:
+            return float(v)
+
+    wc = getattr(ds, "WindowCenter", None)
+    ww = getattr(ds, "WindowWidth", None)
+
+    if wc is not None and ww is not None:
+        wc, ww = _first(wc), _first(ww)
+        low = wc - ww / 2.0
+        high = wc + ww / 2.0
+    else:
+        low = float(np.min(arr))
+        high = float(np.max(arr))
+
+    arr = np.clip(arr, low, high)
+    if high > low:
+        arr = (arr - low) / (high - low) * 255.0
+    else:
+        arr = np.zeros_like(arr)
+
+    # MONOCHROME1 — инвертированная яркость
+    if getattr(ds, "PhotometricInterpretation", "") == "MONOCHROME1":
+        arr = 255.0 - arr
+
+    arr = arr.astype(np.uint8)
+
+    # Если вдруг цветной (RGB/YBR) — PIL сам разберётся, если shape (H, W, 3)
+    Image.fromarray(arr).save(output_path, format="PNG")
