@@ -8,15 +8,21 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TypeVar, overload
 import httpx
+import time
+import uuid
+
+import cv2
+import numpy as np
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.concurrency import run_in_threadpool
 
 from hot_env import reload_if_changed, load_env
 from dicom_io import find_dicom_files, _dicom_to_png
 from csv_io import enrich_json_with_csv
+from annotate import annotate_image
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,9 +81,72 @@ templates = Jinja2Templates(directory="server/templates")
 
 ALLOWED_EXTENSIONS = [".zip"]
 MAX_SIZE = 50 * 1024 * 1024
-MAX_FILES = 10
+MAX_FILES = 100
 
 INFERENCE_URL = os.environ.get("INFERENCE_URL", "http://inference:8001/infer")
+
+_ANNOTATED_TTL_SEC = 3600
+_ANNOTATED_DIR = Path(tempfile.mkdtemp(prefix="annotated_"))
+_ANNOTATED: dict[str, tuple[Path, float]] = {}   # token -> (path, created_at)
+
+
+def _purge_old_annotated() -> None:
+    now = time.time()
+    for token, (path, created) in list(_ANNOTATED.items()):
+        if now - created > _ANNOTATED_TTL_SEC or not path.exists():
+            _ANNOTATED.pop(token, None)
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+
+def _annotate_results_zip(
+    results: list[dict],
+    images_zip: Path,
+    output_zip: Path,
+) -> None:
+    """
+    Читает PNG из images_zip, наносит аннотации по results,
+    пишет размеченные PNG в output_zip (те же имена, что и во входе).
+    """
+    with zipfile.ZipFile(images_zip, "r") as zin, \
+         zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zout:
+
+        names = set(zin.namelist())
+        by_basename: dict[str, str] = {}
+        for n in names:
+            by_basename.setdefault(Path(n).name, n)
+
+        for res in results:
+            file_field = res.get("file")
+            if not file_field:
+                continue
+
+            member = file_field if file_field in names \
+                else by_basename.get(Path(file_field).name)
+            if member is None:
+                logger.warning("Annotate: image not found in zip: %s", file_field)
+                continue
+
+            data = zin.read(member)
+            arr = np.frombuffer(data, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is None:
+                logger.warning("Annotate: failed to decode %s", member)
+                continue
+
+            try:
+                annotated = annotate_image(img, res)
+            except Exception:
+                logger.exception("Annotate: failed for %s", member)
+                continue
+
+            ok, buf = cv2.imencode(".png", annotated)
+            if not ok:
+                logger.warning("Annotate: failed to encode %s", member)
+                continue
+
+            zout.writestr(member, buf.tobytes())
+
 
 @app.get("/", response_class=HTMLResponse)
 async def upload_form(request: Request):
@@ -85,6 +154,19 @@ async def upload_form(request: Request):
         request=request,
         name="upload.html",
         context={"allowed": ALLOWED_EXTENSIONS},
+    )
+
+
+@app.get("/annotated/{token}")
+async def download_annotated(token: str):
+    _purge_old_annotated()
+    entry = _ANNOTATED.get(token)
+    if not entry or not entry[0].exists():
+        raise HTTPException(404, "Annotated archive not found or expired")
+    return FileResponse(
+        entry[0],
+        media_type="application/zip",
+        filename="annotated.zip",
     )
 
 
@@ -197,9 +279,30 @@ async def upload_archive(file: UploadFile = File(...)):
                 exc.response.status_code, f"Ошибка инференса: {exc.response.text}"
             )
 
+        annotated_url: str | None = None
+        results = inference_results.get("results", []) or []
+        try:
+            _purge_old_annotated()
+            token = uuid.uuid4().hex
+            annotated_zip_path = _ANNOTATED_DIR / f"{token}.zip"
+
+            await run_in_threadpool(
+                _annotate_results_zip,
+                results,
+                dicom_zip_path,
+                annotated_zip_path,
+            )
+
+            _ANNOTATED[token] = (annotated_zip_path, time.time())
+            annotated_url = f"/annotated/{token}"
+        except Exception:
+            logger.exception("Annotating results failed")
+            # не валим весь запрос из-за разметки — просто не отдаём ссылку
+
         return {
             "filename": file.filename,
             "dicom_count": len(dicom_files),
             "results": inference_results.get("results", []),
             "csv": enrich_json_with_csv(inference_results),
+            "annotated_zip_url": annotated_url,
         }
