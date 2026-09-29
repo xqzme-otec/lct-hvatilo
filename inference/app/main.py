@@ -33,6 +33,8 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
         if detect_region(np.array(Image.open(p))) == SPINE:
             vertebrae_w_r = None
             vertebrae = None
+            artifact = None
+
             try:
                 vertebrae_w_r = infer_vertebrae_with_rib(p)
             except Exception as e:
