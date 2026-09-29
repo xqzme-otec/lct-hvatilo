@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Результат</title></head>
+<body>
+    <h1>Архив: {{ data.filename }}</h1>
+    <p>Файлов внутри: {{ data.entries | length }}</p>
+    <ul>
+        {% for name in data.entries %}
+        <li>{{ name }}</li>
+        {% endfor %}
+    </ul>
+    <a href="/">← Загрузить ещё</a>
+</body>
+</html>
