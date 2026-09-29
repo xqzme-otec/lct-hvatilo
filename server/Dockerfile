@@ -3,7 +3,7 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt server/
+COPY server/requirements.txt .
 RUN pip install --no-cache-dir  --target=/app/deps -r server/requirements.txt
 
 
@@ -12,9 +12,9 @@ FROM gcr.io/distroless/python3-debian13:nonroot
 WORKDIR /app
 
 COPY --from=builder /app/deps /app/deps
-ENV PYTHONPATH="/app/deps:/app"
+ENV PYTHONPATH="/app/deps:/app/server"
 ENV PYTHONUNBUFFERED=1
-COPY . ./server
+COPY ./server/ ./server/
 USER nonroot
 EXPOSE 8000
 CMD ["server/entrypoint.py"]

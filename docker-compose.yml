@@ -1,8 +1,8 @@
 services:
   api:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     ports:
       - "${WEB_APP_PORT:-80}:8000"
     group_add:
