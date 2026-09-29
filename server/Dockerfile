@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 COPY server/requirements.txt .
-RUN pip install --no-cache-dir  --target=/app/deps -r server/requirements.txt
+RUN pip install --no-cache-dir  --target=/app/deps -r requirements.txt
 
 
 ### Runtime
