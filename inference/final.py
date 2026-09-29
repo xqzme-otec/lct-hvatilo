@@ -2,7 +2,7 @@ from pathlib import Path
 import numpy as np
 
 from ultralytics import YOLO
-from scripts.dicom_io import load_dicom
+from server.dicom_io import load_dicom
 
 
 img = load_dicom("dicom_examples/CR000000_ПОП.dcm")      # переводит снимок в uint8 так же, как при обучении

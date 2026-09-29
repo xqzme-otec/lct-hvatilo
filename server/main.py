@@ -2,22 +2,20 @@ import logging
 import os
 import tempfile
 import zipfile
-import io
 import asyncio
 import contextlib
-
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TypeVar, overload
+import httpx
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.concurrency import run_in_threadpool
-from hot_env import reload_if_changed, load_env
-from inference.vertebrae_with_rib import infer_vertebrae_with_rib
 
-from scripts.dicom_io import find_dicom_files
-from scripts.inference import load_model, run_inference
+from hot_env import reload_if_changed, load_env
+from dicom_io import find_dicom_files
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,13 +23,17 @@ logger = logging.getLogger(__name__)
 if not load_env(force=False):
     logger.warning("No .env file found at startup, will rely on os.environ")
 
-
 T = TypeVar("T")
+
 
 @overload
 def env_optional(key: str) -> str | None: ...
+
+
 @overload
 def env_optional(key: str, default: T) -> T: ...
+
+
 def env_optional(key: str, default: T | None = None) -> T | None:
     reload_if_changed()
     value = os.environ.get(key)
@@ -74,6 +76,7 @@ ALLOWED_EXTENSIONS = [".zip"]
 MAX_SIZE = 50 * 1024 * 1024
 MAX_FILES = 10
 
+INFERENCE_URL = os.environ.get("INFERENCE_URL", "http://inference:8001/infer")
 
 @app.get("/", response_class=HTMLResponse)
 async def upload_form(request: Request):
@@ -86,23 +89,11 @@ async def upload_form(request: Request):
 
 @app.get("/test")
 async def root():
-    return {"message": "Hello DEXA"}
-
-
-def _run_inference_sync(dicom_paths: list[Path]) -> list[dict]:
-    results = []
-    for p in dicom_paths:
-        try:
-            pred = infer_vertebrae_with_rib(p)
-            results.append({"file": str(p), "ok": True, "result": pred})
-        except Exception as e:
-            logger.exception("Inference failed for %s", p)
-            results.append({"file": str(p), "ok": False, "error": str(e)})
-    return results
+    return {"message": "Hello DEXA (Web Server)"}
 
 
 def safe_extract_zip(zip_path: Path, target: Path) -> None:
-    """Распаковка zip с защитой от path traversal (zip-slip)."""
+    """Безопасная распаковка zip с защитой от path traversal (zip-slip)."""
     target = target.resolve()
     with zipfile.ZipFile(zip_path) as zf:
         for member in zf.namelist():
@@ -110,6 +101,15 @@ def safe_extract_zip(zip_path: Path, target: Path) -> None:
             if not member_path.is_relative_to(target):
                 raise HTTPException(400, f"Unsafe path in archive: {member}")
         zf.extractall(target)
+
+
+def _create_dicom_zip(dicom_files: list[Path], base_dir: Path, output_zip: Path) -> None:
+    """Упаковывает только найденные DICOM-файлы в новый ZIP для отправки в инференс."""
+    with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for file_path in dicom_files:
+            # Сохраняем относительный путь внутри архива
+            arcname = file_path.relative_to(base_dir)
+            zf.write(file_path, arcname)
 
 
 @app.post("/upload")
@@ -125,7 +125,6 @@ async def upload_archive(file: UploadFile = File(...)):
     if len(contents) > MAX_SIZE:
         raise HTTPException(413, "File too large")
 
-    # Временная папка — удалится сама при выходе из блока
     with tempfile.TemporaryDirectory(prefix="dicom_upload_") as tmp:
         tmp_path = Path(tmp)
         zip_path = tmp_path / "archive.zip"
@@ -150,18 +149,27 @@ async def upload_archive(file: UploadFile = File(...)):
         if len(dicom_files) > MAX_FILES:
             raise HTTPException(413, f"Too many DICOM files: {len(dicom_files)}")
 
-        results = await run_in_threadpool(_run_inference_sync, dicom_files)
+        dicom_zip_path = tmp_path / "dicom_files.zip"
+        await run_in_threadpool(_create_dicom_zip, dicom_files, extract_dir, dicom_zip_path)
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:  # Таймаут увеличен для инференса
+                with open(dicom_zip_path, "rb") as f:
+                    files = {"file": ("dicom_files.zip", f, "application/zip")}
+                    response = await client.post(INFERENCE_URL, files=files)
+
+                response.raise_for_status()
+                inference_results = response.json()
+
+        except httpx.RequestError as exc:
+            logger.error(f"Ошибка соединения с сервисом инференса: {exc}")
+            raise HTTPException(503, "Сервис инференса недоступен")
+        except httpx.HTTPStatusError as exc:
+            logger.error(f"Сервис инференса вернул ошибку: {exc.response.text}")
+            raise HTTPException(exc.response.status_code, f"Ошибка инференса: {exc.response.text}")
 
         return {
             "filename": file.filename,
             "dicom_count": len(dicom_files),
-            "results": [
-                {
-                    **r,
-                    "file": str(Path(r["file"]).relative_to(extract_dir)),
-                }
-                for r in results
-            ],
+            "results": inference_results.get("results", []),
         }
-
-    raise HTTPException(500, "Could not create temp directory")

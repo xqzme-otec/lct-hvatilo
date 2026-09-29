@@ -6,19 +6,16 @@ from ultralytics import YOLO
 logger = Logger(__name__)
 logger.setLevel(logging.DEBUG)
 
-def infer_vertebrae_with_rib(image_path: Path):
-    path = Path(__file__).resolve().parent.parent / "models" / "vertebrae_with_rib.pt"
-    model = YOLO(str(path))
+def infer_vertebrae_with_rib(image):
+    model = YOLO("/app/models/vertebrae_with_rib.pt")  # Загружаем модель при старте
 
-    r = model.predict(image_path, conf=0.3, verbose=False)[0]
+    r = model.predict(image, conf=0.3, verbose=False)[0]
     has = len(r.boxes) > 0
     verdict = "accept" if has else "review"
 
-    logger.debug(f"image={image_path}")
     logger.debug(f"verdict={verdict}")
 
     response_data = {
-        "image": str(image_path),
         "verdict": verdict,
         "detections": []
     }

@@ -1,0 +1,7 @@
+fastapi==0.141.1
+jinja2==3.1.6
+python-multipart==0.0.32
+uvicorn==0.54.0
+ultralytics==8.4.164
+opencv-python-headless==5.0.0.93
+pillow==12.3.0
