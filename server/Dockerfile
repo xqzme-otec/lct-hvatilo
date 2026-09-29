@@ -19,4 +19,4 @@ ENV PYTHONUNBUFFERED=1
 COPY . .
 USER nonroot
 EXPOSE 8000
-CMD ["python3", "-m", "server.entrypoint"]
+CMD ["server/entrypoint.py"]
