@@ -16,7 +16,7 @@ services:
     networks:
       - lct-net
 
-  inference-service:
+  inference:
     build:
       context: ./inference
       dockerfile: Dockerfile
