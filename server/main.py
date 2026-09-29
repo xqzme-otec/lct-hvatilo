@@ -1,16 +1,23 @@
 import logging
 import os
+import tempfile
 import zipfile
 import io
 import asyncio
 import contextlib
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TypeVar, overload
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.concurrency import run_in_threadpool
 from hot_env import reload_if_changed, load_env
+from inference.vertebrae_with_rib import infer_vertebrae_with_rib
+
+from scripts.dicom_io import find_dicom_files
+from scripts.inference import load_model, run_inference
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +72,7 @@ templates = Jinja2Templates(directory="server/templates")
 
 ALLOWED_EXTENSIONS = [".zip"]
 MAX_SIZE = 50 * 1024 * 1024
+MAX_FILES = 10
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -81,6 +89,29 @@ async def root():
     return {"message": "Hello DEXA"}
 
 
+def _run_inference_sync(dicom_paths: list[Path]) -> list[dict]:
+    results = []
+    for p in dicom_paths:
+        try:
+            pred = infer_vertebrae_with_rib(p)
+            results.append({"file": str(p), "ok": True, "result": pred})
+        except Exception as e:
+            logger.exception("Inference failed for %s", p)
+            results.append({"file": str(p), "ok": False, "error": str(e)})
+    return results
+
+
+def safe_extract_zip(zip_path: Path, target: Path) -> None:
+    """Распаковка zip с защитой от path traversal (zip-slip)."""
+    target = target.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in zf.namelist():
+            member_path = (target / member).resolve()
+            if not member_path.is_relative_to(target):
+                raise HTTPException(400, f"Unsafe path in archive: {member}")
+        zf.extractall(target)
+
+
 @app.post("/upload")
 async def upload_archive(file: UploadFile = File(...)):
     if not file.filename:
@@ -94,15 +125,43 @@ async def upload_archive(file: UploadFile = File(...)):
     if len(contents) > MAX_SIZE:
         raise HTTPException(413, "File too large")
 
-    try:
-        with zipfile.ZipFile(io.BytesIO(contents)) as zf:
-            names = zf.namelist()
-    except zipfile.BadZipFile:
-        raise HTTPException(400, "Invalid zip archive")
+    # Временная папка — удалится сама при выходе из блока
+    with tempfile.TemporaryDirectory(prefix="dicom_upload_") as tmp:
+        tmp_path = Path(tmp)
+        zip_path = tmp_path / "archive.zip"
+        zip_path.write_bytes(contents)
 
-    return {"filename": file.filename, "size": len(contents), "entries": names}
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
 
+        try:
+            safe_extract_zip(zip_path, extract_dir)
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "Invalid zip archive")
 
-@app.post("/upload-multiple")
-async def upload_multiple(files: list[UploadFile] = File(...)):
-    return [{"filename": f.filename, "content_type": f.content_type} for f in files]
+        try:
+            dicom_files = await run_in_threadpool(find_dicom_files, extract_dir)
+        except Exception:
+            logger.exception("find_dicom_files failed")
+            raise HTTPException(500, "Failed to scan archive for DICOM files")
+
+        if not dicom_files:
+            raise HTTPException(422, "No DICOM files found in archive")
+        if len(dicom_files) > MAX_FILES:
+            raise HTTPException(413, f"Too many DICOM files: {len(dicom_files)}")
+
+        results = await run_in_threadpool(_run_inference_sync, dicom_files)
+
+        return {
+            "filename": file.filename,
+            "dicom_count": len(dicom_files),
+            "results": [
+                {
+                    **r,
+                    "file": str(Path(r["file"]).relative_to(extract_dir)),
+                }
+                for r in results
+            ],
+        }
+
+    raise HTTPException(500, "Could not create temp directory")

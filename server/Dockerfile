@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir  --target=/app/deps -r requirements.txt
+RUN mkdir -p /app/models && \
+    curl -L -o /app/models/vertebrae_with_ribs.pt https://github.com/xqzme-otec/lct-hvatilo/releases/download/weights-v1/vertebrae_with_ribs.pt
 
 ### Runtime
 FROM gcr.io/distroless/python3-debian13:nonroot
