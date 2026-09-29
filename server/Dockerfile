@@ -14,9 +14,9 @@ FROM gcr.io/distroless/python3-debian13:nonroot
 WORKDIR /app
 COPY --from=builder /app/deps /app/deps
 COPY --from=builder /app/models /app/models
-ENV PYTHONPATH="/app/deps"
+ENV PYTHONPATH="/app/deps:/app"
 ENV PYTHONUNBUFFERED=1
 COPY . .
 USER nonroot
 EXPOSE 8000
-CMD ["server/entrypoint.py"]
+CMD ["python3", "-m", "server.entrypoint"]
