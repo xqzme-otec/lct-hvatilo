@@ -1,5 +1,6 @@
 import logging
 import tempfile
+import time
 import zipfile
 import numpy as np
 from PIL import Image
@@ -30,35 +31,56 @@ def _run_inference_sync(file_paths: list[Path]) -> list[dict]:
     """Синхронный запуск инференса по всем файлам."""
     results = []
     for p in file_paths:
+        file_started = time.perf_counter()
+        
+        region_started = time.perf_counter()
         anatomical_region = detect_region(np.array(Image.open(p)))
+        region_detect_ms = (time.perf_counter() - region_started) * 1000
         if anatomical_region == SPINE:
-            vertebrae_w_r = None
-            vertebrae = None
-            artifact = None
+            timings = {
+                "region_detect_ms": round(region_detect_ms, 2),
+            }
 
-            try:
-                vertebrae_w_r = infer_vertebrae_with_rib(p)
-            except Exception as e:
-                logger.exception("Inference failed for %s", p)
-            try:
-                vertebrae = infer_vertebrae(p)
-            except Exception as e:
-                logger.exception("Inference failed for %s", p)
-            try:
-                artifact = inference_artifact(p)
-            except Exception as e:
-                logger.exception("Inference failed for %s", p)
+            model_results = {}
+
+            models = (
+                ("vertebrae_w_rib", infer_vertebrae_with_rib),
+                ("vertebrae", infer_vertebrae),
+                ("artifact", inference_artifact),
+            )
+
+            for model_name, model_func in models:
+                model_started = time.perf_counter()
+                try:
+                    model_results[model_name] = model_func(p)
+                except Exception:
+                    logger.exception("Inference failed for %s (%s)", p, model_name)
+                    model_results[model_name] = None
+                finally:
+                    timings[f"{model_name}_ms"] = round(
+                        (time.perf_counter() - model_started) * 1000, 2
+                    )
 
             results.append({
                 "file": str(p),
                 "ok": True,
                 "region": anatomical_region,
-                "vertebrae_w_rib": vertebrae_w_r,
-                "vertebrae": vertebrae,
-                "artifact": artifact,
+                "vertebrae_w_rib": model_results.get("vertebrae_w_rib"),
+                "vertebrae": model_results.get("vertebrae"),
+                "artifact": model_results.get("artifact"),
+                "timings": timings,
             })
         else:
-            results.append({"file": str(p), "ok": False, "error": "Unsupported body region"})
+            results.append({
+                "file": str(p),
+                "ok": False,
+                "error": "Unsupported body region",
+                "region": anatomical_region,
+                "timings": {
+                    "region_detect_ms": round(region_detect_ms, 2),
+                    "total_ms": round((time.perf_counter() - file_started) * 1000, 2),
+                },
+            })
     return results
 
 @app.post("/infer")
