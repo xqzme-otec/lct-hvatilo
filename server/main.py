@@ -16,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from hot_env import reload_if_changed, load_env
 from dicom_io import find_dicom_files, _dicom_to_png
-from server.csv_io import enrich_json_with_csv
+from csv_io import enrich_json_with_csv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
