@@ -86,10 +86,16 @@ def spine_from_result(res, conf: float, kpt_conf: float, dedup: bool = True) -> 
 
 
 def infer_vertebrae(image_path):
-    image = np.array(Image.open(image_path))
+    image = np.array(Image.open(image_path).convert("L"))
+    if image.ndim == 3:
+        image = image[..., 0]
+    if image.dtype != np.uint8:
+        image = (image / max(image.max(), 1) * 255).astype(np.uint8)
+    model_input = np.stack([image] * 3, axis=-1)
+
 
     model = YOLO("/app/models/art_paste_strong.pt")
-    res = model.predict(np.stack([image.pixels] * 3, -1), imgsz=640, conf=0.05, verbose=False)[0]
+    res = model.predict(model_input, imgsz=640, conf=0.05, verbose=False)[0]
 
     sp = spine_from_result(res, conf=0.3, kpt_conf=0.5)
     ferguson_result = ferguson(sp["vertebrae"])
