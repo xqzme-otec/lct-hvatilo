@@ -1,6 +1,7 @@
 import json
 import csv
 import io
+import re
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,18 @@ FIELDNAMES = [
     "processing_status",
     "time_of_processing",
 ]
+
+
+_NUM_RE = re.compile(r"(\d+)")
+
+
+def _natural_key(path: str):
+    """
+    Ключ для натуральной сортировки по имени файла:
+    CR000002.png < CR000010.png < CR000100.png
+    """
+    name = Path(path).name
+    return [int(p) if p.isdigit() else p.lower() for p in _NUM_RE.split(name)]
 
 
 def _get_study_uid(study: dict) -> str:
@@ -43,7 +56,7 @@ def _get_time_of_processing_sec(item: dict) -> float:
     return round(total_ms / 1000.0, 3)
 
 
-def json_to_rows(data: Any) -> list[dict]:
+def json_to_rows(data: Any, sort: bool = True) -> list[dict]:
     """Превращает JSON-ответ эндпоинта в список строк для CSV."""
     studies = data if isinstance(data, list) else [data]
     rows = []
@@ -64,6 +77,9 @@ def json_to_rows(data: Any) -> list[dict]:
                 "processing_status": "Success" if item.get("ok", False) else "Failure",
                 "time_of_processing": _get_time_of_processing_sec(item),
             })
+
+    if sort:
+        rows.sort(key=lambda r: _natural_key(r["path_to_study"]))
 
     return rows
 
