@@ -4,6 +4,7 @@ from logging import Logger
 
 import numpy as np
 from ultralytics import YOLO
+from PIL import Image
 
 from scripts.ferguson import ferguson
 
@@ -84,7 +85,9 @@ def spine_from_result(res, conf: float, kpt_conf: float, dedup: bool = True) -> 
     return {"vertebrae": verts, "n_vertebrae": len(verts), "axis_deg": fit_axis_deg(pts)}
 
 
-def infer_vertebrae(image):
+def infer_vertebrae(image_path):
+    image = np.array(Image.open(image_path))
+
     model = YOLO("/app/models/art_paste_strong.pt")
     res = model.predict(np.stack([image.pixels] * 3, -1), imgsz=640, conf=0.05, verbose=False)[0]
 
