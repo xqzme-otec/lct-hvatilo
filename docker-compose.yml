@@ -18,13 +18,13 @@ services:
 
   inference-service:
     build: ./inference
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [ gpu ]
 
 #  vault-agent:
 #    image: hashicorp/vault:1.17
